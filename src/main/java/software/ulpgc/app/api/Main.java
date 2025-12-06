@@ -1,7 +1,6 @@
 package software.ulpgc.app.api;
 
 import io.javalin.Javalin;
-import io.javalin.http.Context;
 import software.ulpgc.app.GameDeserializer;
 import software.ulpgc.app.RemoteStore;
 import software.ulpgc.architecture.io.Store;
@@ -22,8 +21,12 @@ public class Main {
         app.get("/", ctx -> ctx.result("Games API is running! Use /api/games to get all games"));
         
         app.get("/api/games", ctx -> {
-            List<Game> games = store.games().collect(Collectors.toList());
-            ctx.json(games);
+            try {
+                List<Game> games = store.games().collect(Collectors.toList());
+                ctx.json(games);
+            } catch (Exception e) {
+                ctx.status(500).result("Error retrieving games: " + e.getMessage());
+            }
         });
 
         System.out.println("Server started on http://localhost:7070");
