@@ -25,6 +25,17 @@ public class Main {
         connection.setAutoCommit(false);
         Store store = gamesIn(connection);
 
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                if (connection != null && !connection.isClosed()) {
+                    connection.close();
+                    System.out.println("Database connection closed");
+                }
+            } catch (SQLException e) {
+                System.err.println("Error closing database connection: " + e.getMessage());
+            }
+        }));
+
         Javalin app = Javalin.create(config -> {
             config.http.defaultContentType = "application/json";
         }).start(7070);
