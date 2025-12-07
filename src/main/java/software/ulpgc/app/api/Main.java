@@ -1,0 +1,86 @@
+package software.ulpgc.app.api;
+
+import io.javalin.Javalin;
+import software.ulpgc.app.DatabaseRecorder;
+import software.ulpgc.app.DatabaseStore;
+import software.ulpgc.app.GameDeserializer;
+import software.ulpgc.app.RemoteStore;
+import software.ulpgc.architecture.io.Store;
+import software.ulpgc.architecture.model.Game;
+
+import java.io.File;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+public class Main {
+
+    private static final String database = "games.db";
+
+    public static void main(String[] args) throws SQLException {
+        Connection connection = DriverManager.getConnection("jdbc:sqlite:" + database);
+        connection.setAutoCommit(false);
+        Store store = gamesIn(connection);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                if (connection != null && !connection.isClosed()) {
+                    connection.close();
+                    System.out.println("Database connection closed");
+                }
+            } catch (SQLException e) {
+                System.err.println("Error closing database connection: " + e.getMessage());
+            }
+        }));
+
+        Javalin app = Javalin.create(config -> {
+            config.http.defaultContentType = "application/json";
+        }).start(7070);
+
+        app.get("/", ctx -> ctx.result("Games API is running! Use /api/games to get all games. Query params: name, year"));
+
+        app.get("/api/games", ctx -> {
+            try {
+                String name = ctx.queryParam("name");
+                String yearParam = ctx.queryParam("year");
+                Integer year = yearParam != null ? Integer.parseInt(yearParam) : null;
+
+                DatabaseStore dbStore = (DatabaseStore) store;
+                List<Game> games;
+                
+                if (name != null || year != null) {
+                    games = dbStore.games(name, year).collect(Collectors.toList());
+                } else {
+                    games = store.games().collect(Collectors.toList());
+                }
+                
+                ctx.json(games);
+            } catch (NumberFormatException e) {
+                ctx.status(400).result("Invalid year parameter. Must be a valid integer.");
+            } catch (Exception e) {
+                ctx.status(500).result("Error retrieving games: " + e.getMessage());
+            }
+        });
+
+        System.out.println("Server started on http://localhost:7070");
+        System.out.println("Access games at http://localhost:7070/api/games");
+    }
+
+    private static Store gamesIn(Connection connection) throws SQLException {
+        if (isDatabaseEmpty()) importGamesInto(connection);
+        return new DatabaseStore(connection);
+    }
+
+    private static void importGamesInto(Connection connection) throws SQLException {
+        Stream<Game> games = new RemoteStore(GameDeserializer::fromCsv).games();
+        new DatabaseRecorder(connection).record(games);
+    }
+
+    private static boolean isDatabaseEmpty() {
+        File dbFile = new File(database);
+        return !dbFile.exists() || dbFile.length() == 0;
+    }
+}
