@@ -64,12 +64,15 @@ public class DatabaseStore implements Store {
 
     public Stream<Game> gamesIn(ResultSet rs) {
         return Stream.generate(()-> nextGameIn(rs))
-                .onClose(()->close(rs))
+                .onClose(()->closeResultSet(rs))
                 .takeWhile(Objects::nonNull);
     }
 
-    private void close(ResultSet rs) {
+    private void closeResultSet(ResultSet rs) {
         try {
+            if (rs.getStatement() != null) {
+                rs.getStatement().close();
+            }
             rs.close();
         } catch (SQLException e) {
             throw new RuntimeException(e);
