@@ -40,12 +40,26 @@ public class Main {
             config.http.defaultContentType = "application/json";
         }).start(7070);
 
-        app.get("/", ctx -> ctx.result("Games API is running! Use /api/games to get all games"));
+        app.get("/", ctx -> ctx.result("Games API is running! Use /api/games to get all games. Query params: name, year"));
 
         app.get("/api/games", ctx -> {
             try {
-                List<Game> games = store.games().collect(Collectors.toList());
+                String name = ctx.queryParam("name");
+                String yearParam = ctx.queryParam("year");
+                Integer year = yearParam != null ? Integer.parseInt(yearParam) : null;
+
+                DatabaseStore dbStore = (DatabaseStore) store;
+                List<Game> games;
+                
+                if (name != null || year != null) {
+                    games = dbStore.games(name, year).collect(Collectors.toList());
+                } else {
+                    games = store.games().collect(Collectors.toList());
+                }
+                
                 ctx.json(games);
+            } catch (NumberFormatException e) {
+                ctx.status(400).result("Invalid year parameter. Must be a valid integer.");
             } catch (Exception e) {
                 ctx.status(500).result("Error retrieving games: " + e.getMessage());
             }
